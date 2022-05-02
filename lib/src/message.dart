@@ -6,9 +6,12 @@ import 'dart:typed_data';
 import 'package:convert/convert.dart';
 import 'package:dart_des/dart_des.dart';
 
+/// ISO-8583 Message.
 class Message {
+  /// Main constructor.
   Message(this.mti);
 
+  /// Parses a [Message] from the input byte-array.
   factory Message.parse(Uint8List data) {
     final bitmap = data.sublist(2, 10);
     final hexmap = hex.encode(bitmap);
@@ -32,6 +35,7 @@ class Message {
     return message;
   }
 
+  /// Creates a connection-test [Message] with Processig Code of 41 00 00.
   factory Message.conntectionTest({DateTime? dateTime}) {
     final now = dateTime ?? DateTime.now().toLocal();
 
@@ -46,6 +50,7 @@ class Message {
     return x;
   }
 
+  /// Creates a purchase [Message] with Processig Code of 00 00 00.
   factory Message.purchase({required int amount, DateTime? dateTime}) {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
@@ -66,6 +71,8 @@ class Message {
 
     return x;
   }
+
+  /// Creates an ack [Message] with Processig Code of 00 00 04.
   factory Message.ack({required String terminalId, DateTime? dateTime}) {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
@@ -80,6 +87,7 @@ class Message {
     return x;
   }
 
+  /// Creates a nack [Message] with Processig Code of 00 00 05.
   factory Message.nack({required String terminalId, DateTime? dateTime}) {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
@@ -94,6 +102,7 @@ class Message {
     return x;
   }
 
+  /// Creates an eot [Message] with Processig Code of 00 00 07.
   factory Message.eot({required String terminalId, DateTime? dateTime}) {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
@@ -108,6 +117,7 @@ class Message {
     return x;
   }
 
+  /// Creates a dispose [Message] with Processig Code of 00 00 01.
   factory Message.dispose({DateTime? dateTime}) {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
@@ -124,6 +134,7 @@ class Message {
   final String mti;
   final _data = <int, Uint8List>{};
 
+  /// Clones the message into a new instance.
   Message clone() {
     final copy = Message(mti);
     copy._data.addAll(_data);
@@ -131,10 +142,12 @@ class Message {
     return copy;
   }
 
+  /// Sets a data element with index.
   void set(int field, List<int> value) {
     _data[field] = Uint8List.fromList(value);
   }
 
+  /// Sets a data element with index for a Date field.
   void setDate(int field, DateTime value) {
     final mm = value.month.toString().padLeft(2, '0');
     final dd = value.day.toString().padLeft(2, '0');
@@ -145,6 +158,7 @@ class Message {
     _data[field] = Uint8List.fromList(x);
   }
 
+  /// Sets a data element with index for a Time field.
   void setTime(int field, DateTime value) {
     final hh = value.hour.toString().padLeft(2, '0');
     final mm = value.minute.toString().padLeft(2, '0');
@@ -156,6 +170,7 @@ class Message {
     _data[field] = Uint8List.fromList(x);
   }
 
+  /// Gets the pos device terminal id (field 41).
   String? get terminalId {
     final f = get(41);
     if (f == null) return null;
@@ -163,18 +178,24 @@ class Message {
     return String.fromCharCodes(f);
   }
 
+  /// Gets a data element for index.
   Uint8List? get(int field) {
     return _data[field];
   }
 
+  /// Unset a data element for index.
   void unset(int field) {
     _data.remove(field);
   }
 
-  Uint8List encode([bool addmac = true]) {
-    var y = mac();
+  /// Encodes a [Message] object to a [Uint8List]. Optionally adds MAC to the field 64.
+  Uint8List encode({List<int>? macKey}) {
+    if (macKey != null) {
+      var y = mac(macKey);
 
-    set(64, y);
+      set(64, y);
+    }
+
     final bdy = _body();
     final bmp = _bitmap();
     final mt = Uint8List.fromList(hex.decode(mti));
@@ -233,7 +254,8 @@ class Message {
     return _getBytes(v);
   }
 
-  Uint8List mac() {
+  /// Calculates the MAC for current [Message].
+  Uint8List mac(List<int> key) {
     final c = clone();
     c.set(64, List<int>.filled(8, 0));
     final bmp = c._bitmap();
@@ -246,13 +268,14 @@ class Message {
     v.add(c._body());
 
     final vv = v.expand((element) => element).toList();
-    final en = _caculateMAC(vv);
+    final en = _caculateMAC(vv, key);
 
     final mc = en.skip((en.length ~/ 8 - 1) * 8).take(8).toList();
 
     return Uint8List.fromList(mc);
   }
 
+  /// Converts the [Message] object to JSON.
   Map<String, Object> toJson() {
     final map = <String, Object>{};
 
@@ -290,8 +313,7 @@ class Message {
 
 final _json = JsonEncoder.withIndent(' ');
 
-const _key = [0x23, 0xab, 0xe1, 0x82, 0xca, 0xb5, 0x64, 0x7d];
-Uint8List _caculateMAC(List<int> data) {
+Uint8List _caculateMAC(List<int> data, List<int> key) {
   final desired = (data.length / 8.0).ceil() * 8;
   final count = desired - data.length;
 
@@ -300,7 +322,7 @@ Uint8List _caculateMAC(List<int> data) {
   }
 
   final des =
-      DES(key: _key, mode: DESMode.CBC, paddingType: DESPaddingType.None);
+      DES(key: key, mode: DESMode.CBC, paddingType: DESPaddingType.None);
   final x = des.encrypt(data);
 
   return Uint8List.fromList(x);
