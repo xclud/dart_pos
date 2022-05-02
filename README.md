@@ -1,3 +1,5 @@
+[![pub package](https://img.shields.io/pub/v/pos.svg)](https://pub.dartlang.org/packages/pos)
+
 Dart Implementation of the [ISO-8583](https://en.wikipedia.org/wiki/ISO_8583) banking protocol. Supports `03xx` message class (File Actions Message - 1987) and is compatible with most PoS devices in the market.
 
 ## Features
