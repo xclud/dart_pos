@@ -69,3 +69,8 @@ final iso8583Message = Message.parse(Uint8List);
 ## Additional information
 
 Please look at the `./example` directory for a working demo using `TCP` and `SerialPort`.
+
+
+## Special Thanks
+
+I would thank [YeGoBox](https://github.com/yegobox/) for being kind enought to transfer the ownership of their original `pos` package to me.
