@@ -131,6 +131,7 @@ class Message {
     return x;
   }
 
+  /// Message Type Indicator.
   final String mti;
   final _data = <int, Uint8List>{};
 
