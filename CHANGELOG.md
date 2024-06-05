@@ -1,3 +1,7 @@
+## 0.3.2
+
+* ISO 9797 Alg 3 Pad 2 implemented.
+
 ## 0.3.1
 
 * Added doc comments to improve package score.
