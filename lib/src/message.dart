@@ -184,10 +184,9 @@ class Message {
   }
 
   /// Encodes a [Message] object to a [Uint8List]. Optionally adds MAC to the field 64.
-  Uint8List encode({List<int>? macKey}) {
-    if (macKey != null) {
-      var y = mac(macKey);
-
+  Uint8List encode({Uint8List Function(List<int> message)? algorithm}) {
+    if (algorithm != null) {
+      final y = mac(algorithm);
       set(64, y);
     }
 
@@ -250,7 +249,7 @@ class Message {
   }
 
   /// Calculates the MAC for current [Message].
-  Uint8List mac(List<int> key) {
+  Uint8List mac(Uint8List Function(List<int> message) algorithm) {
     final c = clone();
     c.set(64, List<int>.filled(8, 0));
     final bmp = c._bitmap();
@@ -263,7 +262,7 @@ class Message {
     v.add(c._body());
 
     final vv = v.expand((element) => element).toList();
-    final en = calculateMac(key, vv);
+    final en = algorithm(vv);
 
     final mc = en.skip((en.length ~/ 8 - 1) * 8).take(8).toList();
 
