@@ -7,11 +7,13 @@ class Message {
 
   /// Parses a [Message] from the input byte-array.
   factory Message.parse(Uint8List data) {
+    final mti = hex.encode(data.take(2).toList()).toUpperCase();
+
     final bitmap = data.sublist(2, 10);
     final hexmap = hex.encode(bitmap);
     final v = int.parse(hexmap, radix: 16);
     final pb = v.toRadixString(2).padLeft(64, '0');
-    final message = Message('0300');
+    final message = Message(mti);
 
     final parser = _MessageParser(data);
 
@@ -272,6 +274,8 @@ class Message {
   /// Converts the [Message] object to JSON.
   Map<String, Object> toJson() {
     final map = <String, Object>{};
+
+    map['MTI'] = mti;
 
     for (var i = 1; i <= 64; i++) {
       final f = _data[i];

@@ -1,3 +1,7 @@
+## 0.3.4
+
+* Parse MTIs other than 0300.
+
 ## 0.3.3
 
 * Cleanup ISO-9797 code.
