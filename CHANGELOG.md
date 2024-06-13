@@ -1,3 +1,7 @@
+## 0.3.5
+
+* Add partial field support.
+
 ## 0.3.4
 
 * Parse MTIs other than 0300.

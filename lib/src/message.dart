@@ -38,8 +38,8 @@ class Message {
     final x = Message('0300');
     //x.set(1, '0300');
     x.set(3, [0x41, 0x00, 0x00]);
-    x.setTime(12, now);
-    x.setDate(13, now);
+    x.dateTime = now;
+
     x.set(25, [0x14]);
     x.set(49, [0x33, 0x36, 0x34]); // '364' in ASCII.
 
@@ -56,9 +56,8 @@ class Message {
 
     x.set(3, [0, 0, 0]);
     x.set(4, amb);
+    x.dateTime = now;
 
-    x.setTime(12, now);
-    x.setDate(13, now);
     x.set(25, [0x14]);
     x.set(46, [0x33, 0x30, 0x30]); // '300' in ASCII.
     x.set(48, '200003123001a11003456001c'.codeUnits);
@@ -74,9 +73,8 @@ class Message {
     final now = dateTime ?? DateTime.now().toLocal();
 
     x.set(3, [0x00, 0x00, 0x04]);
+    x.dateTime = now;
 
-    x.setTime(12, now);
-    x.setDate(13, now);
     x.set(25, [0x14]);
     x.set(41, terminalId.codeUnits);
 
@@ -89,9 +87,8 @@ class Message {
     final now = dateTime ?? DateTime.now().toLocal();
 
     x.set(3, [0x00, 0x00, 0x05]);
+    x.dateTime = now;
 
-    x.setTime(12, now);
-    x.setDate(13, now);
     x.set(25, [0x14]);
     x.set(41, terminalId.codeUnits);
 
@@ -105,8 +102,8 @@ class Message {
 
     x.set(3, [0x00, 0x00, 0x07]);
 
-    x.setTime(12, now);
-    x.setDate(13, now);
+    x.dateTime = now;
+
     x.set(39, [0x17]);
     x.set(41, terminalId.codeUnits);
 
@@ -119,9 +116,8 @@ class Message {
     final now = dateTime ?? DateTime.now().toLocal();
 
     x.set(3, [0x00, 0x00, 0x01]);
+    x.dateTime = now;
 
-    x.setTime(12, now);
-    x.setDate(13, now);
     x.set(25, [0x14]);
 
     return x;
@@ -129,7 +125,8 @@ class Message {
 
   /// Message Type Indicator.
   final String mti;
-  final _data = <int, Uint8List>{};
+  final _data = <int, List<int>>{};
+  final _bmp = <int, bool>{};
 
   /// Clones the message into a new instance.
   Message clone() {
@@ -145,18 +142,18 @@ class Message {
   }
 
   /// Sets a data element with index for a Date field.
-  void setDate(int field, DateTime value) {
+  Uint8List _setDate(DateTime value) {
     final mm = value.month.toString().padLeft(2, '0');
     final dd = value.day.toString().padLeft(2, '0');
 
     final h = '$mm$dd';
     final x = hex.decode(h);
 
-    _data[field] = Uint8List.fromList(x);
+    return Uint8List.fromList(x);
   }
 
   /// Sets a data element with index for a Time field.
-  void setTime(int field, DateTime value) {
+  Uint8List _setTime(DateTime value) {
     final hh = value.hour.toString().padLeft(2, '0');
     final mm = value.minute.toString().padLeft(2, '0');
     final ss = value.second.toString().padLeft(2, '0');
@@ -164,7 +161,7 @@ class Message {
     final h = '$hh$mm$ss';
     final x = hex.decode(h);
 
-    _data[field] = Uint8List.fromList(x);
+    return Uint8List.fromList(x);
   }
 
   /// Gets the pos device terminal id (field 41).
@@ -176,7 +173,7 @@ class Message {
   }
 
   /// Gets a data element for index.
-  Uint8List? get(int field) {
+  List<int>? get(int field) {
     return _data[field];
   }
 
@@ -188,7 +185,7 @@ class Message {
   /// Encodes a [Message] object to a [Uint8List]. Optionally adds MAC to the field 64.
   Uint8List encode({Uint8List Function(List<int> message)? algorithm}) {
     if (algorithm != null) {
-      final y = mac(algorithm);
+      final y = calcmac(algorithm);
       set(64, y);
     }
 
@@ -200,10 +197,279 @@ class Message {
     return Uint8List.fromList(xx);
   }
 
+  String? _f02Pan;
+  String? _f03ProcessCode;
+  int? _f11Stan;
+  DateTime? _f1213DateTime;
+  String? _f24Nii;
+  String? _f35Track2;
+
+  String? _mac;
+
+  /// PAN, the Card Number.
+  /// Field 2.
+  ///
+  /// Must be 16 or 19 characters.
+  String? get pan => _f02Pan;
+  set pan(String? value) {
+    final v = value;
+
+    assert(
+      v == null || v.length == 16 || v.length == 19,
+      'PAN should be null, or 16 or 19 characters long.',
+    );
+
+    if (v == null) {
+      _bmp[2] = false;
+      _f02Pan = null;
+    } else {
+      _bmp[2] = true;
+      _f02Pan = value;
+    }
+  }
+
+  /// Process Code.
+  /// Field 3.
+  ///
+  /// Must be 6 characters.
+  String? get processCode => _f03ProcessCode;
+  set processCode(String? value) {
+    final v = value;
+
+    assert(
+      v == null || v.length == 6,
+      'Process Code should be null or 6 characters long.',
+    );
+
+    if (v == null) {
+      _bmp[3] = false;
+      _f03ProcessCode = null;
+    } else {
+      _bmp[3] = true;
+      _f03ProcessCode = value;
+    }
+  }
+
+  /// Stan.
+  /// Field 11.
+  ///
+  /// Must be in (1,9999) range.
+  int? get stan => _f11Stan;
+  set stan(int? value) {
+    final v = value;
+
+    assert(
+      v == null || v > 0 || v < 9999,
+      'Stan should be in [1,9999] range.',
+    );
+
+    if (v == null) {
+      _bmp[11] = false;
+      _f11Stan = null;
+    } else {
+      _bmp[11] = true;
+      _f11Stan = value;
+    }
+  }
+
+  /// Date & Time.
+  /// Field 12 & 13.
+  ///
+  DateTime? get dateTime => _f1213DateTime;
+  set dateTime(DateTime? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[12] = false;
+      _bmp[13] = false;
+
+      _f1213DateTime = null;
+    } else {
+      _bmp[12] = true;
+      _bmp[13] = true;
+
+      _f1213DateTime = value;
+    }
+  }
+
+  /// NII.
+  /// Field 24.
+  ///
+  /// Must be 4 characters.
+  String? get nii => _f24Nii;
+  set nii(String? value) {
+    final v = value;
+
+    assert(
+      v == null || v.length == 4,
+      'NII should be null or 4 characters long.',
+    );
+
+    if (v == null) {
+      _bmp[24] = false;
+      _f24Nii = null;
+    } else {
+      _bmp[24] = true;
+      _f24Nii = value;
+    }
+  }
+
+  /// Track 2.
+  /// Field 35.
+  ///
+  /// Must be 38 characters right padded with '0'.
+  String? get track2 => _f35Track2;
+  set track2(String? value) {
+    final v = value;
+
+    assert(
+      v == null || v.length < 39,
+      'Track2 must be 38 characers max.',
+    );
+
+    if (v == null) {
+      _bmp[35] = false;
+      _f35Track2 = null;
+    } else {
+      _bmp[35] = true;
+      _f35Track2 = value;
+    }
+  }
+
+  /// MAC.
+  /// Field 64 or 128.
+  ///
+  /// Must be 4 characters.
+  String? get mac => _mac;
+  set mac(String? value) {
+    final v = value;
+
+    assert(
+      v == null || v.length == 16,
+      'MAC should be null or 16 characters long.',
+    );
+
+    if (v == null) {
+      _bmp[64] = false;
+      _mac = null;
+    } else {
+      _bmp[64] = true;
+      _mac = value;
+    }
+  }
+
   Uint8List _body() {
-    final bits = <Uint8List>[];
+    final bits = <List<int>>[];
+    final strBits = <String>[];
 
     for (var i = 1; i <= 64; i++) {
+      if (i == 2) {
+        final p = pan;
+
+        if (p != null) {
+          final vv = p.length == 19 ? '${p}0' : p;
+
+          final f2 = [..._decimalAsHexBytes(p.length, 2), ...hex.decode(vv)];
+          final s2 = '${p.length}$p';
+
+          bits.add(f2);
+
+          strBits.add(s2);
+        }
+
+        continue;
+      } else if (i == 3) {
+        final p = processCode;
+
+        if (p != null) {
+          final f2 = hex.decode(p);
+          bits.add(f2);
+
+          strBits.add(p);
+        }
+
+        continue;
+      } else if (i == 11) {
+        final p = stan;
+
+        if (p != null) {
+          final f2 = hex.decode(p.toString());
+          bits.add(f2);
+
+          strBits.add(p.toString());
+        }
+
+        continue;
+      } else if (i == 12) {
+        final p = _f1213DateTime;
+
+        if (p != null) {
+          bits.add(_setTime(p));
+
+          final hh = p.hour.toString().padLeft(2, '0');
+          final mm = p.minute.toString().padLeft(2, '0');
+          final ss = p.second.toString().padLeft(2, '0');
+
+          final h = '$hh$mm$ss';
+
+          strBits.add(h);
+        }
+
+        continue;
+      } else if (i == 13) {
+        final p = _f1213DateTime;
+
+        if (p != null) {
+          bits.add(_setDate(p));
+
+          final mm = p.month.toString().padLeft(2, '0');
+          final dd = p.day.toString().padLeft(2, '0');
+
+          final h = '$mm$dd';
+
+          strBits.add(h);
+        }
+
+        continue;
+      } else if (i == 24) {
+        final p = _f24Nii;
+
+        if (p != null) {
+          final f2 = hex.decode(p);
+          bits.add(f2);
+
+          strBits.add(p);
+        }
+
+        continue;
+      } else if (i == 35) {
+        final p = track2;
+
+        if (p != null) {
+          final vv = p.padRight(38, '0');
+
+          final f35 = [
+            ..._decimalAsHexBytes(vv.length - 1, 2),
+            ...hex.decode(vv)
+          ];
+          bits.add(f35);
+
+          final s2 = '${vv.length - 1}$vv';
+          strBits.add(s2);
+        }
+
+        continue;
+      } else if (i == 64) {
+        final p = mac;
+
+        if (p != null) {
+          bits.add(hex.decode(p));
+          strBits.add(p);
+        }
+
+        continue;
+      }
+
       final f = _data[i];
 
       if (f == null) {
@@ -240,7 +506,7 @@ class Message {
     final bits = <String>[];
 
     for (var i = 1; i <= 64; i++) {
-      if (_data[i] != null) {
+      if (_data[i] != null || _bmp[i] == true) {
         bits.add('1');
       } else {
         bits.add('0');
@@ -251,7 +517,7 @@ class Message {
   }
 
   /// Calculates the MAC for current [Message].
-  Uint8List mac(Uint8List Function(List<int> message) algorithm) {
+  Uint8List calcmac(Uint8List Function(List<int> message) algorithm) {
     final c = clone();
     c.set(64, List<int>.filled(8, 0));
     final bmp = c._bitmap();
@@ -277,7 +543,39 @@ class Message {
 
     map['MTI'] = mti;
 
-    for (var i = 1; i <= 64; i++) {
+    final mPan = pan;
+    final mProcessCode = processCode;
+    final mStan = stan;
+    final mDateTime = dateTime;
+    final mNii = nii;
+    final mTrack2 = track2;
+    final mMac = mac;
+
+    if (mPan != null) {
+      map['PAN'] = mPan;
+    }
+
+    if (mProcessCode != null) {
+      map['ProcessCode'] = mProcessCode;
+    }
+
+    if (mStan != null) {
+      map['Stan'] = mStan;
+    }
+
+    if (mDateTime != null) {
+      map['DateTime'] = mDateTime.toIso8601String();
+    }
+
+    if (mNii != null) {
+      map['NII'] = mNii;
+    }
+
+    if (mTrack2 != null) {
+      map['Track2'] = mTrack2;
+    }
+
+    for (var i = 1; i < 64; i++) {
       final f = _data[i];
 
       if (f == null) {
@@ -300,6 +598,10 @@ class Message {
       }
     }
 
+    if (mMac != null) {
+      map['MAC'] = mMac;
+    }
+
     return map;
   }
 
@@ -307,4 +609,9 @@ class Message {
   String toString() {
     return _json.convert(toJson());
   }
+}
+
+List<int> _decimalAsHexBytes(int v, int l) {
+  final y = v.toString().padLeft(l, '0');
+  return hex.decode(y);
 }
