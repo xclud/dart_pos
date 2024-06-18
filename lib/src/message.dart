@@ -137,6 +137,7 @@ class Message {
   }
 
   /// Sets a data element with index.
+  @Deprecated('Please use the specific property for the field number')
   void set(int field, List<int> value) {
     _data[field] = Uint8List.fromList(value);
   }
@@ -164,20 +165,14 @@ class Message {
     return Uint8List.fromList(x);
   }
 
-  /// Gets the pos device terminal id (field 41).
-  String? get terminalId {
-    final f = get(41);
-    if (f == null) return null;
-
-    return String.fromCharCodes(f);
-  }
-
   /// Gets a data element for index.
+  @Deprecated('Please use the specific property for the field number')
   List<int>? get(int field) {
     return _data[field];
   }
 
   /// Unset a data element for index.
+  @Deprecated('Please use the specific property for the field number')
   void unset(int field) {
     _data.remove(field);
   }
@@ -186,7 +181,8 @@ class Message {
   Uint8List encode({Uint8List Function(List<int> message)? algorithm}) {
     if (algorithm != null) {
       final y = calcmac(algorithm);
-      set(64, y);
+
+      mac = hex.encode(y).toUpperCase();
     }
 
     final bdy = _body();
@@ -203,6 +199,10 @@ class Message {
   DateTime? _f1213DateTime;
   String? _f24Nii;
   String? _f35Track2;
+  String? _f41TerminalId;
+  String? _f42MerchantId;
+  DataElement? _f48DataElement;
+  int? _f49Currency;
 
   String? _mac;
 
@@ -336,6 +336,66 @@ class Message {
     }
   }
 
+  /// Terminal Id.
+  /// Field 41.
+  String? get terminalId => _f41TerminalId;
+  set terminalId(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[41] = false;
+      _f41TerminalId = null;
+    } else {
+      _bmp[41] = true;
+      _f41TerminalId = value;
+    }
+  }
+
+  /// Merchant Id.
+  /// Field 42.
+  String? get merchantId => _f42MerchantId;
+  set merchantId(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[42] = false;
+      _f42MerchantId = null;
+    } else {
+      _bmp[42] = true;
+      _f42MerchantId = value;
+    }
+  }
+
+  /// Currency.
+  /// Field 48.
+  DataElement? get dataElement => _f48DataElement;
+  set dataElement(DataElement? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[48] = false;
+      _f48DataElement = null;
+    } else {
+      _bmp[48] = true;
+      _f48DataElement = value;
+    }
+  }
+
+  /// Currency.
+  /// Field 49.
+  int? get currency => _f49Currency;
+  set currency(int? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[49] = false;
+      _f49Currency = null;
+    } else {
+      _bmp[49] = true;
+      _f49Currency = value;
+    }
+  }
+
   /// MAC.
   /// Field 64 or 128.
   ///
@@ -459,6 +519,46 @@ class Message {
         }
 
         continue;
+      } else if (i == 41) {
+        final p = terminalId;
+
+        if (p != null) {
+          bits.add(p.codeUnits);
+          strBits.add(p);
+        }
+
+        continue;
+      } else if (i == 42) {
+        final p = merchantId;
+
+        if (p != null) {
+          bits.add(p.codeUnits);
+          strBits.add(p);
+        }
+
+        continue;
+      } else if (i == 48) {
+        final p = dataElement;
+
+        if (p != null) {
+          final enc = p._encode();
+          bits.add(enc);
+          strBits.add(hex.encode(enc).toUpperCase());
+        }
+
+        continue;
+      } else if (i == 49) {
+        final p = currency;
+
+        if (p != null) {
+          final h = p.toString().codeUnits;
+          final hh = hex.encode(h);
+
+          bits.add(h);
+          strBits.add(hh);
+        }
+
+        continue;
       } else if (i == 64) {
         final p = mac;
 
@@ -549,7 +649,11 @@ class Message {
     final mDateTime = dateTime;
     final mNii = nii;
     final mTrack2 = track2;
+    final mTerminalId = terminalId;
+    final mMerchantId = merchantId;
+    final mCurrency = currency;
     final mMac = mac;
+    final mDataElement = dataElement;
 
     if (mPan != null) {
       map['PAN'] = mPan;
@@ -573,6 +677,22 @@ class Message {
 
     if (mTrack2 != null) {
       map['Track2'] = mTrack2;
+    }
+
+    if (mTerminalId != null) {
+      map['TerminalId'] = mTerminalId;
+    }
+
+    if (mMerchantId != null) {
+      map['MerchantId'] = mMerchantId;
+    }
+
+    if (mDataElement != null) {
+      map['DataElement'] = mDataElement.toJson();
+    }
+
+    if (mCurrency != null) {
+      map['Currency'] = mCurrency;
     }
 
     for (var i = 1; i < 64; i++) {
