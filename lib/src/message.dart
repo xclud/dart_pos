@@ -40,7 +40,7 @@ class Message {
     x.processCode = 0x410000;
     x.dateTime = now;
 
-    x.posConditionCode = '14';
+    x.posConditionCode = 0x14;
     x.currency = 364;
 
     return x;
@@ -58,10 +58,10 @@ class Message {
     x.set(4, amb);
     x.dateTime = now;
 
-    x.set(25, [0x14]);
+    x.posConditionCode = 0x14;
     x.set(46, [0x33, 0x30, 0x30]); // '300' in ASCII.
     x.set(48, '200003123001a11003456001c'.codeUnits);
-    x.set(49, [0x33, 0x36, 0x34]); // '364' in ASCII.
+    x.currency = 364;
     x.set(57, '1.4.8.2'.codeUnits);
 
     return x;
@@ -75,7 +75,7 @@ class Message {
     x.processCode = 0x000004;
     x.dateTime = now;
 
-    x.set(25, [0x14]);
+    x.posConditionCode = 0x14;
     x.terminalId = terminalId;
 
     return x;
@@ -89,7 +89,7 @@ class Message {
     x.processCode = 0x000005;
     x.dateTime = now;
 
-    x.set(25, [0x14]);
+    x.posConditionCode = 0x14;
     x.terminalId = terminalId;
 
     return x;
@@ -117,7 +117,7 @@ class Message {
     x.processCode = 0x000001;
     x.dateTime = now;
 
-    x.set(25, [0x14]);
+    x.posConditionCode = 0x14;
 
     return x;
   }
@@ -196,9 +196,9 @@ class Message {
   int? _f03ProcessCode;
   int? _f11Stan;
   DateTime? _f1213DateTime;
-  String? _f22CardEntryMode;
+  int? _f22CardEntryMode;
   String? _f24Nii;
-  String? _f25POSConditionCode;
+  int? _f25POSConditionCode;
   String? _f35Track2;
   String? _f41TerminalId;
   String? _f42MerchantId;
@@ -296,9 +296,14 @@ class Message {
 
   /// Card Entry Mode.
   /// Field 22.
-  String? get cardEntryMode => _f22CardEntryMode;
-  set cardEntryMode(String? value) {
+  int? get cardEntryMode => _f22CardEntryMode;
+  set cardEntryMode(int? value) {
     final v = value;
+
+    assert(
+      v == null || v > -1 || v < 0xffff,
+      'CardEntryMode should be null or between [0x00, 0xFFFF].',
+    );
 
     if (v == null) {
       _bmp[22] = false;
@@ -333,9 +338,14 @@ class Message {
 
   /// POS Condition Code.
   /// Field 25.
-  String? get posConditionCode => _f25POSConditionCode;
-  set posConditionCode(String? value) {
+  int? get posConditionCode => _f25POSConditionCode;
+  set posConditionCode(int? value) {
     final v = value;
+
+    assert(
+      v == null || v > -1 || v < 0xff,
+      'PosConditionCode should be null or between [0x00, 0xFF].',
+    );
 
     if (v == null) {
       _bmp[25] = false;
@@ -451,7 +461,7 @@ class Message {
   /// MAC.
   /// Field 64 or 128.
   ///
-  /// Must be 4 characters.
+  /// Must be 16 characters.
   String? get mac => _mac;
   set mac(String? value) {
     final v = value;
@@ -547,6 +557,36 @@ class Message {
         }
 
         continue;
+      } else if (i == 22) {
+        final p = cardEntryMode;
+
+        if (p != null) {
+          final bt = ByteData(2);
+          bt.setUint16(0, p, Endian.big);
+
+          final f22 = bt.buffer.asUint8List();
+          final s22 = hex.encode(f22);
+
+          bits.add(f22);
+          strBits.add(s22);
+        }
+
+        continue;
+      } else if (i == 25) {
+        final p = posConditionCode;
+
+        if (p != null) {
+          final bt = ByteData(1);
+          bt.setUint8(0, p);
+
+          final f25 = bt.buffer.asUint8List();
+          final s25 = hex.encode(f25);
+
+          bits.add(f25);
+          strBits.add(s25);
+        }
+
+        continue;
       } else if (i == 24) {
         final p = _f24Nii;
 
@@ -579,7 +619,7 @@ class Message {
         final p = terminalId;
 
         if (p != null) {
-          bits.add(p.codeUnits);
+          bits.add(hex.decode(p));
           strBits.add(p);
         }
 
@@ -588,7 +628,7 @@ class Message {
         final p = merchantId;
 
         if (p != null) {
-          bits.add(p.codeUnits);
+          bits.add(hex.decode(p));
           strBits.add(p);
         }
 
@@ -686,7 +726,7 @@ class Message {
   /// Calculates the MAC for current [Message].
   Uint8List calcmac(Uint8List Function(List<int> message) algorithm) {
     final c = clone();
-    c.mac = '00000000000000';
+    c.mac = '0000000000000000';
     final bmp = c._bitmap();
     c.mac = null;
 
