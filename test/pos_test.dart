@@ -63,7 +63,7 @@ void main() {
 
     final now = DateTime(2024, 6, 10, 14, 24, 03);
 
-    message.processCode = '920000';
+    message.processCode = 0x920000;
     message.stan = 123456;
     message.dateTime = now;
     message.nii = '0300';
@@ -90,7 +90,7 @@ void main() {
     final message = pos.Message('0100');
 
     message.pan = '6274121195119854';
-    message.processCode = '310000';
+    message.processCode = 0x310000;
     message.track2 = '6274121195119854d281010052639594340480';
     message.stan = 123456;
     message.dateTime = now;
@@ -105,12 +105,11 @@ void main() {
       connectionType: 0x32,
     );
 
-    message.set(22, [0x00, 0x21]);
-    message.set(25, [0x00]);
-    message.set(48, createField48ForLogOn(sid, aid));
+    message.cardEntryMode = '0021';
+    message.posConditionCode = '00';
 
     // Pin Block
-    message.set(52, [0xB5, 0xB5, 0x2E, 0xB4, 0x10, 0x13, 0x9F, 0xD7]);
+    message.pinBlock = [0xB5, 0xB5, 0x2E, 0xB4, 0x10, 0x13, 0x9F, 0xD7];
 
     message.mac = '0000000000000000';
     final messageData = message.encode(algorithm: _calculateMac);
@@ -120,30 +119,6 @@ void main() {
     expect(messageHex,
         '01006038058020C1900116627412119511985431000012345614240306100021030000376274121195119854D28101005263959434048033303031313433323330303030303030353039393430002511014E3832573333303936350602352E302E33020330021532333634B5B52EB410139FD73231393042313445');
   });
-}
-
-List<int> createField48ForLogOn(String serialNumber, String version,
-    [int language = 0x30]) {
-  final posSerial = [0x01, ...serialNumber.codeUnits];
-  final langugeCode = [0x03, language];
-  final appVersion = [0x02, ...version.codeUnits];
-  const connectionType = [0x15, 0x32];
-
-  var field48 = _decimalAsHexBytes(posSerial.length, 2) +
-      posSerial +
-      _decimalAsHexBytes(appVersion.length, 2) +
-      appVersion +
-      _decimalAsHexBytes(langugeCode.length, 2) +
-      langugeCode +
-      _decimalAsHexBytes(connectionType.length, 2) +
-      connectionType;
-
-  return field48;
-}
-
-List<int> _decimalAsHexBytes(int v, int l) {
-  final y = v.toString().padLeft(l, '0');
-  return hex.decode(y);
 }
 
 Uint8List _calculateMac(List<int> data) {

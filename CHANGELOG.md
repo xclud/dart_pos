@@ -1,3 +1,7 @@
+## 0.3.7
+
+* Pin Block, Card Entry Mode and POS Condition Code fields added.
+
 ## 0.3.6
 
 * Data Element (DE) for field 48.

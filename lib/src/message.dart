@@ -37,11 +37,11 @@ class Message {
 
     final x = Message('0300');
     //x.set(1, '0300');
-    x.set(3, [0x41, 0x00, 0x00]);
+    x.processCode = 0x410000;
     x.dateTime = now;
 
-    x.set(25, [0x14]);
-    x.set(49, [0x33, 0x36, 0x34]); // '364' in ASCII.
+    x.posConditionCode = '14';
+    x.currency = 364;
 
     return x;
   }
@@ -54,7 +54,7 @@ class Message {
     final am = amount.toString().padLeft(12, '0');
     final amb = hex.decode(am);
 
-    x.set(3, [0, 0, 0]);
+    x.processCode = 0x000000;
     x.set(4, amb);
     x.dateTime = now;
 
@@ -72,11 +72,11 @@ class Message {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
 
-    x.set(3, [0x00, 0x00, 0x04]);
+    x.processCode = 0x000004;
     x.dateTime = now;
 
     x.set(25, [0x14]);
-    x.set(41, terminalId.codeUnits);
+    x.terminalId = terminalId;
 
     return x;
   }
@@ -86,11 +86,11 @@ class Message {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
 
-    x.set(3, [0x00, 0x00, 0x05]);
+    x.processCode = 0x000005;
     x.dateTime = now;
 
     x.set(25, [0x14]);
-    x.set(41, terminalId.codeUnits);
+    x.terminalId = terminalId;
 
     return x;
   }
@@ -100,12 +100,11 @@ class Message {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
 
-    x.set(3, [0x00, 0x00, 0x07]);
-
+    x.processCode = 0x000007;
     x.dateTime = now;
 
     x.set(39, [0x17]);
-    x.set(41, terminalId.codeUnits);
+    x.terminalId = terminalId;
 
     return x;
   }
@@ -115,7 +114,7 @@ class Message {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
 
-    x.set(3, [0x00, 0x00, 0x01]);
+    x.processCode = 0x000001;
     x.dateTime = now;
 
     x.set(25, [0x14]);
@@ -194,16 +193,19 @@ class Message {
   }
 
   String? _f02Pan;
-  String? _f03ProcessCode;
+  int? _f03ProcessCode;
   int? _f11Stan;
   DateTime? _f1213DateTime;
+  String? _f22CardEntryMode;
   String? _f24Nii;
+  String? _f25POSConditionCode;
   String? _f35Track2;
   String? _f41TerminalId;
   String? _f42MerchantId;
   DataElement? _f48DataElement;
   int? _f49Currency;
 
+  List<int>? _f52PinBlock;
   String? _mac;
 
   /// PAN, the Card Number.
@@ -232,13 +234,13 @@ class Message {
   /// Field 3.
   ///
   /// Must be 6 characters.
-  String? get processCode => _f03ProcessCode;
-  set processCode(String? value) {
+  int? get processCode => _f03ProcessCode;
+  set processCode(int? value) {
     final v = value;
 
     assert(
-      v == null || v.length == 6,
-      'Process Code should be null or 6 characters long.',
+      v == null || v < 0xffffff,
+      'Process Code should be null or <= 0xFFFFFF.',
     );
 
     if (v == null) {
@@ -292,6 +294,21 @@ class Message {
     }
   }
 
+  /// Card Entry Mode.
+  /// Field 22.
+  String? get cardEntryMode => _f22CardEntryMode;
+  set cardEntryMode(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[22] = false;
+      _f22CardEntryMode = null;
+    } else {
+      _bmp[22] = true;
+      _f22CardEntryMode = value;
+    }
+  }
+
   /// NII.
   /// Field 24.
   ///
@@ -311,6 +328,21 @@ class Message {
     } else {
       _bmp[24] = true;
       _f24Nii = value;
+    }
+  }
+
+  /// POS Condition Code.
+  /// Field 25.
+  String? get posConditionCode => _f25POSConditionCode;
+  set posConditionCode(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[25] = false;
+      _f25POSConditionCode = null;
+    } else {
+      _bmp[25] = true;
+      _f25POSConditionCode = value;
     }
   }
 
@@ -396,6 +428,26 @@ class Message {
     }
   }
 
+  /// Pin Block.
+  /// Field 52.
+  List<int>? get pinBlock => _f52PinBlock;
+  set pinBlock(List<int>? value) {
+    final v = value;
+
+    assert(
+      v == null || v.length == 8,
+      'pinBlock must be null or 8 bytes.',
+    );
+
+    if (v == null) {
+      _bmp[52] = false;
+      _f52PinBlock = null;
+    } else {
+      _bmp[52] = true;
+      _f52PinBlock = value;
+    }
+  }
+
   /// MAC.
   /// Field 64 or 128.
   ///
@@ -442,10 +494,14 @@ class Message {
         final p = processCode;
 
         if (p != null) {
-          final f2 = hex.decode(p);
-          bits.add(f2);
+          final bt = ByteData(4);
+          bt.setUint32(0, p, Endian.big);
 
-          strBits.add(p);
+          final f3 = bt.buffer.asUint8List().skip(1).toList();
+          final h3 = hex.encode(f3);
+
+          bits.add(f3);
+          strBits.add(h3);
         }
 
         continue;
@@ -559,6 +615,17 @@ class Message {
         }
 
         continue;
+      } else if (i == 52) {
+        final p = pinBlock;
+
+        if (p != null) {
+          final h = hex.encode(p);
+
+          bits.add(p);
+          strBits.add(h);
+        }
+
+        continue;
       } else if (i == 64) {
         final p = mac;
 
@@ -619,9 +686,9 @@ class Message {
   /// Calculates the MAC for current [Message].
   Uint8List calcmac(Uint8List Function(List<int> message) algorithm) {
     final c = clone();
-    c.set(64, List<int>.filled(8, 0));
+    c.mac = '00000000000000';
     final bmp = c._bitmap();
-    c.unset(64);
+    c.mac = null;
 
     final List<Uint8List> v = [];
 
@@ -647,13 +714,16 @@ class Message {
     final mProcessCode = processCode;
     final mStan = stan;
     final mDateTime = dateTime;
+    final mCardEntryMode = cardEntryMode;
     final mNii = nii;
+    final mPosConditionCode = posConditionCode;
     final mTrack2 = track2;
     final mTerminalId = terminalId;
     final mMerchantId = merchantId;
     final mCurrency = currency;
-    final mMac = mac;
     final mDataElement = dataElement;
+    final mPinBlock = pinBlock;
+    final mMac = mac;
 
     if (mPan != null) {
       map['PAN'] = mPan;
@@ -671,8 +741,16 @@ class Message {
       map['DateTime'] = mDateTime.toIso8601String();
     }
 
+    if (mCardEntryMode != null) {
+      map['CardEntryMode'] = mCardEntryMode;
+    }
+
     if (mNii != null) {
       map['NII'] = mNii;
+    }
+
+    if (mPosConditionCode != null) {
+      map['PosConditionCode'] = mPosConditionCode;
     }
 
     if (mTrack2 != null) {
@@ -693,6 +771,10 @@ class Message {
 
     if (mCurrency != null) {
       map['Currency'] = mCurrency;
+    }
+
+    if (mPinBlock != null) {
+      map['PinBlock'] = '0x${hex.encode(mPinBlock).toUpperCase()}';
     }
 
     for (var i = 1; i < 64; i++) {
