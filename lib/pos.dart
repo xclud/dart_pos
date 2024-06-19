@@ -5,7 +5,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:convert/convert.dart';
-import 'package:iso9797/iso9797.dart' as iso9797;
 
 part 'src/bitmap.dart';
 part 'src/data_element.dart';

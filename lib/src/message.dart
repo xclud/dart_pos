@@ -51,11 +51,8 @@ class Message {
     final x = Message('0300');
     final now = dateTime ?? DateTime.now().toLocal();
 
-    final am = amount.toString().padLeft(12, '0');
-    final amb = hex.decode(am);
-
     x.processCode = 0x000000;
-    x.set(4, amb);
+    x.amount = amount;
     x.dateTime = now;
 
     x.posConditionCode = 0x14;
@@ -130,6 +127,27 @@ class Message {
   /// Clones the message into a new instance.
   Message clone() {
     final copy = Message(mti);
+
+    final f52PinBlock = _f52PinBlock;
+
+    copy._f02Pan = _f02Pan;
+    copy._f03ProcessCode = _f03ProcessCode;
+    copy._f04Amount = _f04Amount;
+    copy._f11Stan = _f11Stan;
+    copy._f1213DateTime = _f1213DateTime;
+    copy._f22CardEntryMode = _f22CardEntryMode;
+    copy._f24Nii = _f24Nii;
+    copy._f25POSConditionCode = _f25POSConditionCode;
+    copy._f35Track2 = _f35Track2;
+    copy._f41TerminalId = _f41TerminalId;
+    copy._f42MerchantId = _f42MerchantId;
+    copy._f48DataElement = _f48DataElement;
+    copy._f49Currency = _f49Currency;
+    copy._f52PinBlock =
+        f52PinBlock == null ? null : Uint8List.fromList(f52PinBlock);
+    copy._mac = _mac;
+
+    copy._bmp.addAll(_bmp);
     copy._data.addAll(_data);
 
     return copy;
@@ -178,26 +196,25 @@ class Message {
 
   /// Encodes a [Message] object to a [Uint8List]. Optionally adds MAC to the field 64.
   Uint8List encode({Uint8List Function(List<int> message)? algorithm}) {
-    if (algorithm != null) {
-      final y = calcmac(algorithm);
+    final alg = algorithm;
 
-      mac = hex.encode(y).toUpperCase();
-    }
+    final fmac = alg != null ? calcmac(alg) : Uint8List(8);
 
     final bdy = _body();
     final bmp = _bitmap();
     final mt = Uint8List.fromList(hex.decode(mti));
 
-    final xx = mt + bmp + bdy;
+    final xx = mt + bmp + bdy + fmac;
     return Uint8List.fromList(xx);
   }
 
   String? _f02Pan;
   int? _f03ProcessCode;
+  int? _f04Amount;
   int? _f11Stan;
   DateTime? _f1213DateTime;
   int? _f22CardEntryMode;
-  String? _f24Nii;
+  int? _f24Nii;
   int? _f25POSConditionCode;
   String? _f35Track2;
   String? _f41TerminalId;
@@ -206,7 +223,7 @@ class Message {
   int? _f49Currency;
 
   List<int>? _f52PinBlock;
-  String? _mac;
+  List<int>? _mac;
 
   /// PAN, the Card Number.
   /// Field 2.
@@ -249,6 +266,28 @@ class Message {
     } else {
       _bmp[3] = true;
       _f03ProcessCode = value;
+    }
+  }
+
+  /// Amount.
+  /// Field 4.
+  ///
+  /// Must be null or > 0.',
+  int? get amount => _f04Amount;
+  set amount(int? value) {
+    final v = value;
+
+    assert(
+      v == null || v > 0,
+      'Amout should be null or > 0.',
+    );
+
+    if (v == null) {
+      _bmp[4] = false;
+      _f04Amount = null;
+    } else {
+      _bmp[4] = true;
+      _f04Amount = value;
     }
   }
 
@@ -302,7 +341,7 @@ class Message {
 
     assert(
       v == null || v > -1 || v < 0xffff,
-      'CardEntryMode should be null or between [0x00, 0xFFFF].',
+      'CardEntryMode should be null or between [0x0000, 0xFFFF].',
     );
 
     if (v == null) {
@@ -317,14 +356,14 @@ class Message {
   /// NII.
   /// Field 24.
   ///
-  /// Must be 4 characters.
-  String? get nii => _f24Nii;
-  set nii(String? value) {
+  /// Must be betweem [0x0000, 0xFFFF] characters.
+  int? get nii => _f24Nii;
+  set nii(int? value) {
     final v = value;
 
     assert(
-      v == null || v.length == 4,
-      'NII should be null or 4 characters long.',
+      v == null || v > -1 || v < 0xffff,
+      'NII should be null or between [0x0000, 0xFFFF].',
     );
 
     if (v == null) {
@@ -462,13 +501,13 @@ class Message {
   /// Field 64 or 128.
   ///
   /// Must be 16 characters.
-  String? get mac => _mac;
-  set mac(String? value) {
+  List<int>? get mac => _mac;
+  set mac(List<int>? value) {
     final v = value;
 
     assert(
-      v == null || v.length == 16,
-      'MAC should be null or 16 characters long.',
+      v == null || v.length == 8,
+      'MAC should be null or 8 bytes.',
     );
 
     if (v == null) {
@@ -484,7 +523,7 @@ class Message {
     final bits = <List<int>>[];
     final strBits = <String>[];
 
-    for (var i = 1; i <= 64; i++) {
+    for (var i = 1; i < 64; i++) {
       if (i == 2) {
         final p = pan;
 
@@ -512,6 +551,18 @@ class Message {
 
           bits.add(f3);
           strBits.add(h3);
+        }
+
+        continue;
+      } else if (i == 4) {
+        final p = amount;
+
+        if (p != null) {
+          final amountPadded = amount.toString().padLeft(12, '0');
+          final amb = hex.decode(amountPadded);
+
+          bits.add(amb);
+          strBits.add(amountPadded);
         }
 
         continue;
@@ -591,10 +642,14 @@ class Message {
         final p = _f24Nii;
 
         if (p != null) {
-          final f2 = hex.decode(p);
-          bits.add(f2);
+          final bt = ByteData(2);
+          bt.setUint16(0, p, Endian.big);
 
-          strBits.add(p);
+          final f24 = bt.buffer.asUint8List();
+          final s24 = hex.encode(f24);
+
+          bits.add(f24);
+          strBits.add(s24);
         }
 
         continue;
@@ -670,8 +725,8 @@ class Message {
         final p = mac;
 
         if (p != null) {
-          bits.add(hex.decode(p));
-          strBits.add(p);
+          bits.add(p);
+          strBits.add(hex.encode(p));
         }
 
         continue;
@@ -726,7 +781,7 @@ class Message {
   /// Calculates the MAC for current [Message].
   Uint8List calcmac(Uint8List Function(List<int> message) algorithm) {
     final c = clone();
-    c.mac = '0000000000000000';
+    c.mac = Uint8List(8);
     final bmp = c._bitmap();
     c.mac = null;
 
