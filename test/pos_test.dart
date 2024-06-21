@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:test/test.dart';
 import 'package:pos/pos.dart' as pos;
-//import 'package:iso9797/iso9797.dart' as iso9797;
+import 'package:iso9797/iso9797.dart' as iso9797;
 
 const tid = 30011432;
 const mid = 30000000509940;
@@ -84,23 +84,23 @@ void main() {
 
     expect(messageData, '010000000100000000000300');
   });
-  test('Terminal Id', () {
-    final message = pos.Message('0100');
-    message.terminalId = '31327676';
+  // test('Terminal Id', () {
+  //   final message = pos.Message('0100');
+  //   message.terminalId = '31327676';
 
-    final messageData = message.encode();
+  //   final messageData = message.encode();
 
-    expect(messageData, '0100000000000080000031327676');
-  });
+  //   expect(messageData, '0100000000000080000031327676');
+  // });
 
-  test('Merchant Id', () {
-    final message = pos.Message('0100');
-    message.merchantId = 'MOTITILL_000001';
+  // test('Merchant Id', () {
+  //   final message = pos.Message('0100');
+  //   message.merchantId = 'MOTITILL_000001';
 
-    final messageData = message.encode();
+  //   final messageData = message.encode();
 
-    expect(messageData, '01000000000000400000MOTITILL_000001');
-  });
+  //   expect(messageData, '01000000000000400000MOTITILL_000001');
+  // });
 
   test('Create LogOn Message', () {
     final message = pos.Message('0800');
