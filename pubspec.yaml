@@ -1,6 +1,6 @@
 name: pos
 description: Dart Implementation of the ISO-8583 banking protocol for Point of Sale (POS) Devices.
-version: 0.3.8
+version: 0.3.9
 repository: https://github.com/xclud/dart_pos
 homepage: https://pwa.ir
 

@@ -6,122 +6,139 @@ class Message {
   Message(this.mti);
 
   /// Parses a [Message] from the input byte-array.
-  factory Message.parse(Uint8List data) {
-    final mti = hex.encode(data.take(2).toList()).toUpperCase();
-
-    final bitmap = data.sublist(2, 10);
-    final hexmap = hex.encode(bitmap);
-    final v = int.parse(hexmap, radix: 16);
+  factory Message.parse(String data) {
+    final mti = data.substring(0, 4);
+    final bitmap = data.substring(4, 20);
+    final v = int.parse(bitmap, radix: 16);
     final pb = v.toRadixString(2).padLeft(64, '0');
     final message = Message(mti);
+    data = data.substring(20);
 
-    final parser = _MessageParser(data);
+    int? month;
+    int? day;
+    int? hour;
+    int? minute;
+    int? second;
 
     for (int i = 1; i < 64; i++) {
       int o = i + 1;
       if (pb[i] != '1') {
         continue;
       }
-      final field = _valueOf(o);
 
-      final fieldData = parser.parse(field);
-      message.set(field.no, fieldData);
+      if (o == 2) {
+        final len = _readLength2(data);
+        data = data.substring(2);
+
+        message.pan = data.substring(0, len);
+        data = data.substring(len);
+      } else if (o == 3) {
+        final processCode = data.substring(0, 6);
+        data = data.substring(6);
+
+        message.processCode = int.parse(processCode, radix: 16);
+      } else if (o == 4) {
+        final amountString = data.substring(0, 12);
+        data = data.substring(12);
+
+        final amount = int.parse(amountString);
+
+        message.amount = amount;
+      } else if (o == 11) {
+        final stanString = data.substring(0, 6);
+        data = data.substring(6);
+
+        final stan = int.parse(stanString);
+
+        message.stan = stan;
+      } else if (o == 12) {
+        final timeString = data.substring(0, 6);
+        data = data.substring(6);
+
+        final hh = timeString.substring(0, 2);
+        final mm = timeString.substring(2, 4);
+        final ss = timeString.substring(4, 6);
+
+        hour = int.parse(hh);
+        minute = int.parse(mm);
+        second = int.parse(ss);
+      } else if (o == 13) {
+        final dateString = data.substring(0, 4);
+        data = data.substring(4);
+
+        final mm = dateString.substring(0, 2);
+        final dd = dateString.substring(2, 4);
+
+        month = int.parse(mm);
+        day = int.parse(dd);
+      } else if (o == 24) {
+        final niiString = data.substring(0, 4);
+        data = data.substring(4);
+
+        final nii = int.parse(niiString, radix: 16);
+
+        message.nii = nii;
+      } else if (o == 37) {
+        final rrnString = data.substring(0, 24);
+        data = data.substring(24);
+        final rrn = String.fromCharCodes(hex.decode(rrnString));
+
+        message.rrn = rrn;
+      } else if (o == 38) {
+        final irnString = data.substring(0, 12);
+        data = data.substring(12);
+        final identificationReferenceNumber =
+            String.fromCharCodes(hex.decode(irnString));
+
+        message.identificationReferenceNumber = identificationReferenceNumber;
+      } else if (o == 39) {
+        final rcString = data.substring(0, 4);
+        data = data.substring(4);
+
+        final responseCode = String.fromCharCodes(hex.decode(rcString));
+
+        message.responseCode = responseCode;
+      } else if (o == 41) {
+        final terminalString = data.substring(0, 16);
+        data = data.substring(16);
+
+        message.terminalId = terminalString;
+      } else if (o == 48) {
+        final len = _readLength4Hex(data) * 2;
+        data = data.substring(4);
+
+        final f48 = data.substring(0, len);
+        data = data.substring(len);
+
+        message._f48DataElement = hex.decode(f48);
+      } else if (o == 49) {
+        final currencyCodeString = data.substring(0, 6);
+        data = data.substring(6);
+
+        final currencyCode =
+            int.parse(String.fromCharCodes(hex.decode(currencyCodeString)));
+        message.currency = currencyCode;
+      } else if (o == 64) {
+        final macString = data.substring(0, 16);
+        data = data.substring(16);
+
+        message.mac = Uint8List.fromList(hex.decode(macString));
+      }
+    }
+
+    if (month != null &&
+        day != null &&
+        hour != null &&
+        minute != null &&
+        second != null) {
+      message.dateTime = DateTime(2024, month, day, hour, minute, second);
     }
 
     return message;
   }
 
-  /// Creates a connection-test [Message] with Processig Code of 41 00 00.
-  factory Message.conntectionTest({DateTime? dateTime}) {
-    final now = dateTime ?? DateTime.now().toLocal();
-
-    final x = Message('0300');
-    //x.set(1, '0300');
-    x.processCode = 0x410000;
-    x.dateTime = now;
-
-    x.posConditionCode = 0x14;
-    x.currency = 364;
-
-    return x;
-  }
-
-  /// Creates a purchase [Message] with Processig Code of 00 00 00.
-  factory Message.purchase({required int amount, DateTime? dateTime}) {
-    final x = Message('0300');
-    final now = dateTime ?? DateTime.now().toLocal();
-
-    x.processCode = 0x000000;
-    x.amount = amount;
-    x.dateTime = now;
-
-    x.posConditionCode = 0x14;
-    x.set(46, [0x33, 0x30, 0x30]); // '300' in ASCII.
-    x.set(48, '200003123001a11003456001c'.codeUnits);
-    x.currency = 364;
-    x.set(57, '1.4.8.2'.codeUnits);
-
-    return x;
-  }
-
-  /// Creates an ack [Message] with Processig Code of 00 00 04.
-  factory Message.ack({required String terminalId, DateTime? dateTime}) {
-    final x = Message('0300');
-    final now = dateTime ?? DateTime.now().toLocal();
-
-    x.processCode = 0x000004;
-    x.dateTime = now;
-
-    x.posConditionCode = 0x14;
-    x.terminalId = terminalId;
-
-    return x;
-  }
-
-  /// Creates a nack [Message] with Processig Code of 00 00 05.
-  factory Message.nack({required String terminalId, DateTime? dateTime}) {
-    final x = Message('0300');
-    final now = dateTime ?? DateTime.now().toLocal();
-
-    x.processCode = 0x000005;
-    x.dateTime = now;
-
-    x.posConditionCode = 0x14;
-    x.terminalId = terminalId;
-
-    return x;
-  }
-
-  /// Creates an eot [Message] with Processig Code of 00 00 07.
-  factory Message.eot({required String terminalId, DateTime? dateTime}) {
-    final x = Message('0300');
-    final now = dateTime ?? DateTime.now().toLocal();
-
-    x.processCode = 0x000007;
-    x.dateTime = now;
-
-    x.set(39, [0x17]);
-    x.terminalId = terminalId;
-
-    return x;
-  }
-
-  /// Creates a dispose [Message] with Processig Code of 00 00 01.
-  factory Message.dispose({DateTime? dateTime}) {
-    final x = Message('0300');
-    final now = dateTime ?? DateTime.now().toLocal();
-
-    x.processCode = 0x000001;
-    x.dateTime = now;
-
-    x.posConditionCode = 0x14;
-
-    return x;
-  }
-
   /// Message Type Indicator.
   final String mti;
-  final _data = <int, List<int>>{};
   final _bmp = <int, bool>{};
 
   /// Clones the message into a new instance.
@@ -139,6 +156,9 @@ class Message {
     copy._f24Nii = _f24Nii;
     copy._f25POSConditionCode = _f25POSConditionCode;
     copy._f35Track2 = _f35Track2;
+    copy._f37RRN = _f37RRN;
+    copy._f38IdentificationReferenceNumber = _f38IdentificationReferenceNumber;
+    copy._f39ResponseCode = _f39ResponseCode;
     copy._f41TerminalId = _f41TerminalId;
     copy._f42MerchantId = _f42MerchantId;
     copy._f48DataElement = _f48DataElement;
@@ -148,64 +168,20 @@ class Message {
     copy._mac = _mac;
 
     copy._bmp.addAll(_bmp);
-    copy._data.addAll(_data);
 
     return copy;
   }
 
-  /// Sets a data element with index.
-  @Deprecated('Please use the specific property for the field number')
-  void set(int field, List<int> value) {
-    _data[field] = Uint8List.fromList(value);
-  }
-
-  /// Sets a data element with index for a Date field.
-  Uint8List _setDate(DateTime value) {
-    final mm = value.month.toString().padLeft(2, '0');
-    final dd = value.day.toString().padLeft(2, '0');
-
-    final h = '$mm$dd';
-    final x = hex.decode(h);
-
-    return Uint8List.fromList(x);
-  }
-
-  /// Sets a data element with index for a Time field.
-  Uint8List _setTime(DateTime value) {
-    final hh = value.hour.toString().padLeft(2, '0');
-    final mm = value.minute.toString().padLeft(2, '0');
-    final ss = value.second.toString().padLeft(2, '0');
-
-    final h = '$hh$mm$ss';
-    final x = hex.decode(h);
-
-    return Uint8List.fromList(x);
-  }
-
-  /// Gets a data element for index.
-  @Deprecated('Please use the specific property for the field number')
-  List<int>? get(int field) {
-    return _data[field];
-  }
-
-  /// Unset a data element for index.
-  @Deprecated('Please use the specific property for the field number')
-  void unset(int field) {
-    _data.remove(field);
-  }
-
   /// Encodes a [Message] object to a [Uint8List]. Optionally adds MAC to the field 64.
-  Uint8List encode({Uint8List Function(List<int> message)? algorithm}) {
+  String encode({Uint8List Function(List<int> message)? algorithm}) {
     final alg = algorithm;
-
-    final fmac = alg != null ? calcmac(alg) : Uint8List(8);
+    final fmac = alg != null ? calcmac(alg) : (mac ?? Uint8List(0));
 
     final bdy = _body();
     final bmp = _bitmap();
-    final mt = Uint8List.fromList(hex.decode(mti));
 
-    final xx = mt + bmp + bdy + fmac;
-    return Uint8List.fromList(xx);
+    final xx = mti + hex.encode(bmp) + bdy + hex.encode(fmac);
+    return xx;
   }
 
   String? _f02Pan;
@@ -217,9 +193,12 @@ class Message {
   int? _f24Nii;
   int? _f25POSConditionCode;
   String? _f35Track2;
+  String? _f37RRN;
+  String? _f38IdentificationReferenceNumber;
+  String? _f39ResponseCode;
   String? _f41TerminalId;
   String? _f42MerchantId;
-  DataElement? _f48DataElement;
+  List<int>? _f48DataElement;
   int? _f49Currency;
 
   List<int>? _f52PinBlock;
@@ -278,8 +257,8 @@ class Message {
     final v = value;
 
     assert(
-      v == null || v > 0,
-      'Amout should be null or > 0.',
+      v == null || v >= 0,
+      'Amount should be null or >= 0.',
     );
 
     if (v == null) {
@@ -291,7 +270,7 @@ class Message {
     }
   }
 
-  /// Stan.
+  /// Systems trace audit number.
   /// Field 11.
   ///
   /// Must be in (1,9999) range.
@@ -353,16 +332,16 @@ class Message {
     }
   }
 
-  /// NII.
+  /// Network International Identifier (NII).
   /// Field 24.
   ///
-  /// Must be betweem [0x0000, 0xFFFF] characters.
+  /// Must be betweem [0x0000, 0x0FFF] characters.
   int? get nii => _f24Nii;
   set nii(int? value) {
     final v = value;
 
     assert(
-      v == null || v > -1 || v < 0xffff,
+      v == null || v > -1 || v < 0x0fff,
       'NII should be null or between [0x0000, 0xFFFF].',
     );
 
@@ -417,6 +396,52 @@ class Message {
     }
   }
 
+  /// RRN.
+  /// Field 37.
+  String? get rrn => _f37RRN;
+  set rrn(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[37] = false;
+      _f37RRN = null;
+    } else {
+      _bmp[37] = true;
+      _f37RRN = value;
+    }
+  }
+
+  /// Identification Reference Number.
+  /// Field 38.
+  String? get identificationReferenceNumber =>
+      _f38IdentificationReferenceNumber;
+  set identificationReferenceNumber(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[38] = false;
+      _f38IdentificationReferenceNumber = null;
+    } else {
+      _bmp[38] = true;
+      _f38IdentificationReferenceNumber = value;
+    }
+  }
+
+  /// Response Code.
+  /// Field 39.
+  String? get responseCode => _f39ResponseCode;
+  set responseCode(String? value) {
+    final v = value;
+
+    if (v == null) {
+      _bmp[39] = false;
+      _f39ResponseCode = null;
+    } else {
+      _bmp[39] = true;
+      _f39ResponseCode = value;
+    }
+  }
+
   /// Terminal Id.
   /// Field 41.
   String? get terminalId => _f41TerminalId;
@@ -449,8 +474,8 @@ class Message {
 
   /// Currency.
   /// Field 48.
-  DataElement? get dataElement => _f48DataElement;
-  set dataElement(DataElement? value) {
+  List<int>? get dataElement => _f48DataElement;
+  set dataElement(List<int>? value) {
     final v = value;
 
     if (v == null) {
@@ -519,8 +544,7 @@ class Message {
     }
   }
 
-  Uint8List _body() {
-    final bits = <List<int>>[];
+  String _body() {
     final strBits = <String>[];
 
     for (var i = 1; i < 64; i++) {
@@ -528,14 +552,10 @@ class Message {
         final p = pan;
 
         if (p != null) {
-          final vv = p.length == 19 ? '${p}0' : p;
-
-          final f2 = [..._decimalAsHexBytes(p.length, 2), ...hex.decode(vv)];
           final s2 = '${p.length}$p';
+          final trail = p.length.isOdd ? '0' : '';
 
-          bits.add(f2);
-
-          strBits.add(s2);
+          strBits.add('$s2$trail');
         }
 
         continue;
@@ -548,8 +568,6 @@ class Message {
 
           final f3 = bt.buffer.asUint8List().skip(1).toList();
           final h3 = hex.encode(f3);
-
-          bits.add(f3);
           strBits.add(h3);
         }
 
@@ -559,9 +577,7 @@ class Message {
 
         if (p != null) {
           final amountPadded = amount.toString().padLeft(12, '0');
-          final amb = hex.decode(amountPadded);
 
-          bits.add(amb);
           strBits.add(amountPadded);
         }
 
@@ -570,9 +586,6 @@ class Message {
         final p = stan;
 
         if (p != null) {
-          final f2 = hex.decode(p.toString());
-          bits.add(f2);
-
           strBits.add(p.toString());
         }
 
@@ -581,8 +594,6 @@ class Message {
         final p = _f1213DateTime;
 
         if (p != null) {
-          bits.add(_setTime(p));
-
           final hh = p.hour.toString().padLeft(2, '0');
           final mm = p.minute.toString().padLeft(2, '0');
           final ss = p.second.toString().padLeft(2, '0');
@@ -597,8 +608,6 @@ class Message {
         final p = _f1213DateTime;
 
         if (p != null) {
-          bits.add(_setDate(p));
-
           final mm = p.month.toString().padLeft(2, '0');
           final dd = p.day.toString().padLeft(2, '0');
 
@@ -618,7 +627,6 @@ class Message {
           final f22 = bt.buffer.asUint8List();
           final s22 = hex.encode(f22);
 
-          bits.add(f22);
           strBits.add(s22);
         }
 
@@ -633,23 +641,16 @@ class Message {
           final f25 = bt.buffer.asUint8List();
           final s25 = hex.encode(f25);
 
-          bits.add(f25);
           strBits.add(s25);
         }
 
         continue;
       } else if (i == 24) {
-        final p = _f24Nii;
+        final p = nii;
 
         if (p != null) {
-          final bt = ByteData(2);
-          bt.setUint16(0, p, Endian.big);
-
-          final f24 = bt.buffer.asUint8List();
-          final s24 = hex.encode(f24);
-
-          bits.add(f24);
-          strBits.add(s24);
+          final f24 = p.toRadixString(16).padLeft(4, '0');
+          strBits.add(f24);
         }
 
         continue;
@@ -659,14 +660,32 @@ class Message {
         if (p != null) {
           final vv = p.padRight(38, '0');
 
-          final f35 = [
-            ..._decimalAsHexBytes(vv.length - 1, 2),
-            ...hex.decode(vv)
-          ];
-          bits.add(f35);
-
           final s2 = '${vv.length - 1}$vv';
           strBits.add(s2);
+        }
+
+        continue;
+      } else if (i == 37) {
+        final p = rrn;
+
+        if (p != null) {
+          strBits.add(p);
+        }
+
+        continue;
+      } else if (i == 38) {
+        final p = identificationReferenceNumber;
+
+        if (p != null) {
+          strBits.add(p);
+        }
+
+        continue;
+      } else if (i == 39) {
+        final p = responseCode;
+
+        if (p != null) {
+          strBits.add(p);
         }
 
         continue;
@@ -674,8 +693,8 @@ class Message {
         final p = terminalId;
 
         if (p != null) {
-          bits.add(hex.decode(p));
-          strBits.add(p);
+          final pp = p.padLeft(8, '0');
+          strBits.add(hex.encode(pp.codeUnits));
         }
 
         continue;
@@ -683,8 +702,8 @@ class Message {
         final p = merchantId;
 
         if (p != null) {
-          bits.add(hex.decode(p));
-          strBits.add(p);
+          final pp = p.padRight(15, ' ');
+          strBits.add(hex.encode(pp.codeUnits));
         }
 
         continue;
@@ -692,8 +711,7 @@ class Message {
         final p = dataElement;
 
         if (p != null) {
-          final enc = p._encode();
-          bits.add(enc);
+          final enc = p;
           strBits.add(hex.encode(enc).toUpperCase());
         }
 
@@ -705,7 +723,6 @@ class Message {
           final h = p.toString().codeUnits;
           final hh = hex.encode(h);
 
-          bits.add(h);
           strBits.add(hh);
         }
 
@@ -716,7 +733,6 @@ class Message {
         if (p != null) {
           final h = hex.encode(p);
 
-          bits.add(p);
           strBits.add(h);
         }
 
@@ -725,50 +741,21 @@ class Message {
         final p = mac;
 
         if (p != null) {
-          bits.add(p);
           strBits.add(hex.encode(p));
         }
 
         continue;
       }
-
-      final f = _data[i];
-
-      if (f == null) {
-        continue;
-      }
-
-      final fld = _valueOf(i);
-      if (fld.fixed) {
-        bits.add(f);
-      } else {
-        final bt = ByteData(4);
-        bt.setUint32(0, f.length);
-
-        final uu = bt.buffer
-            .asUint8List()
-            .reversed
-            .take(fld.format!.length - 1)
-            .toList()
-            .reversed
-            .toList()
-            .map((e) => e.toString().padLeft(2, '0'))
-            .map((e) => int.parse(e, radix: 16))
-            .toList();
-
-        bits.add(Uint8List.fromList(uu));
-        bits.add(f);
-      }
     }
-    final v = bits.expand((e) => e).toList();
-    return Uint8List.fromList(v);
+    final v = strBits.join();
+    return v;
   }
 
   Uint8List _bitmap() {
     final bits = <String>[];
 
     for (var i = 1; i <= 64; i++) {
-      if (_data[i] != null || _bmp[i] == true) {
+      if (_bmp[i] == true) {
         bits.add('1');
       } else {
         bits.add('0');
@@ -789,7 +776,7 @@ class Message {
 
     v.add(Uint8List.fromList(hex.decode(c.mti)));
     v.add(bmp);
-    v.add(c._body());
+    //v.add(c._body());
 
     final vv = v.expand((element) => element).toList();
     final en = algorithm(vv);
@@ -807,12 +794,16 @@ class Message {
 
     final mPan = pan;
     final mProcessCode = processCode;
+    final mAmount = amount;
     final mStan = stan;
     final mDateTime = dateTime;
     final mCardEntryMode = cardEntryMode;
     final mNii = nii;
     final mPosConditionCode = posConditionCode;
     final mTrack2 = track2;
+    final mRrn = rrn;
+    final mIdentificationReferenceNumber = identificationReferenceNumber;
+    final mResponseCode = responseCode;
     final mTerminalId = terminalId;
     final mMerchantId = merchantId;
     final mCurrency = currency;
@@ -821,78 +812,71 @@ class Message {
     final mMac = mac;
 
     if (mPan != null) {
-      map['PAN'] = mPan;
+      map['pan'] = mPan;
     }
 
     if (mProcessCode != null) {
-      map['ProcessCode'] = mProcessCode;
+      map['processCode'] = mProcessCode;
+    }
+
+    if (mAmount != null) {
+      map['amount'] = mAmount;
     }
 
     if (mStan != null) {
-      map['Stan'] = mStan;
+      map['stan'] = mStan;
     }
 
     if (mDateTime != null) {
-      map['DateTime'] = mDateTime.toIso8601String();
+      map['dateTime'] = mDateTime.toIso8601String();
     }
 
     if (mCardEntryMode != null) {
-      map['CardEntryMode'] = mCardEntryMode;
+      map['cardEntryMode'] = mCardEntryMode;
     }
 
     if (mNii != null) {
-      map['NII'] = mNii;
+      map['nii'] = mNii;
     }
 
     if (mPosConditionCode != null) {
-      map['PosConditionCode'] = mPosConditionCode;
+      map['posConditionCode'] = mPosConditionCode;
     }
 
     if (mTrack2 != null) {
-      map['Track2'] = mTrack2;
+      map['track2'] = mTrack2;
+    }
+
+    if (mRrn != null) {
+      map['rrn'] = mRrn;
+    }
+
+    if (mIdentificationReferenceNumber != null) {
+      map['identificationReferenceNumber'] = mIdentificationReferenceNumber;
+    }
+
+    if (mResponseCode != null) {
+      map['responseCode'] = mResponseCode;
     }
 
     if (mTerminalId != null) {
-      map['TerminalId'] = mTerminalId;
+      map['terminalId'] = mTerminalId;
     }
 
     if (mMerchantId != null) {
-      map['MerchantId'] = mMerchantId;
+      map['merchantId'] = mMerchantId;
     }
 
     if (mDataElement != null) {
-      map['DataElement'] = mDataElement.toJson();
+      map['dataElement'] = '0x${hex.encode(mDataElement).toUpperCase()}';
     }
 
     if (mCurrency != null) {
-      map['Currency'] = mCurrency;
+      map['currency'] = mCurrency;
     }
 
     if (mPinBlock != null) {
-      map['PinBlock'] = '0x${hex.encode(mPinBlock).toUpperCase()}';
-    }
-
-    for (var i = 1; i < 64; i++) {
-      final f = _data[i];
-
-      if (f == null) {
-        continue;
-      }
-
-      final fld = _valueOf(i);
-
-      if (fld.type == 'ans' || fld.type == 'an') {
-        final z = f.indexOf(0);
-        if (z > 0) {
-          map[i.toString()] = String.fromCharCodes(f.take(z));
-        } else {
-          map[i.toString()] = String.fromCharCodes(f);
-        }
-      } else if (fld.type == 'n') {
-        map[i.toString()] = hex.encode(f);
-      } else if (fld.type == 'b') {
-        map[i.toString()] = '0x${hex.encode(f).toUpperCase()}';
-      }
+      map['pinBlock'] = '0x${hex.encode(mPinBlock).toUpperCase()}';
     }
 
     if (mMac != null) {
@@ -911,4 +895,18 @@ class Message {
 List<int> _decimalAsHexBytes(int v, int l) {
   final y = v.toString().padLeft(l, '0');
   return hex.decode(y);
+}
+
+int _readLength2(String data) {
+  final sub = data.substring(0, 2);
+  final v = int.parse(sub);
+
+  return v;
+}
+
+int _readLength4Hex(String data) {
+  final sub = data.substring(0, 4);
+  final v = int.parse(sub);
+
+  return v;
 }

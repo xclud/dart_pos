@@ -8,8 +8,5 @@ import 'package:convert/convert.dart';
 
 part 'src/bitmap.dart';
 part 'src/data_element.dart';
-part 'src/field.dart';
-part 'src/fields.dart';
 part 'src/message.dart';
-part 'src/parser.dart';
 part 'src/private.dart';

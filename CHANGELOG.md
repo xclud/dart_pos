@@ -1,3 +1,7 @@
+## 0.3.9
+
+* Fixed parsing errors.
+
 ## 0.3.8
 
 * More fields added.

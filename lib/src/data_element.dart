@@ -26,7 +26,8 @@ class DataElement {
   /// Language
   final int? language;
 
-  List<int> _encode() {
+  /// Encode data.
+  List<int> encode() {
     final buffer = <int>[];
 
     final s = serialNumber;
