@@ -1,3 +1,7 @@
+## 0.3.10
+
+* More fields and bug fixes.
+
 ## 0.3.9
 
 * Fixed parsing errors.
