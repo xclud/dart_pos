@@ -691,11 +691,12 @@ class Message {
         final p = nii;
 
         if (p != null) {
-          final bt = ByteData(4);
-          bt.setUint32(0, p, Endian.big);
+          final bt = ByteData(2);
+          bt.setUint16(0, p, Endian.big);
 
-          final f24 = p.toRadixString(16).padLeft(4, '0');
-          final s24 = hex.encode(f24.codeUnits);
+          final bytes = bt.buffer.asUint8List();
+          final s24 = hex.encode(bytes);
+
           strBits.add(s24);
         }
 
